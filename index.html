@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<!-- saved from url=(0043)https://nimble-moonbeam-f50f3a.netlify.app/ -->
+<html lang="ru" style="--tg-viewport-height: 100vh; --tg-viewport-stable-height: 100vh;"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#17171A"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="AMTEL">
+<title>AMTEL — Журнал смен</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap');
+
+  :root{
+    --paper: #17171A;          /* Amtel charcoal background */
+    --paper-2: #1F1F22;
+    --card: #FFFFFF;           /* white cards, like the site's login card */
+    --ink: #F2F2F0;            /* light text on dark bg */
+    --ink-soft: #9A9AA3;
+    --ink-oncard: #17171A;     /* dark text on white cards */
+    --ink-oncard-soft: #6B6B70;
+    --line: rgba(255,255,255,0.10);
+    --line-oncard: rgba(23,23,26,0.12);
+    --stamp-red: #E5484D;      /* danger / sick / delete */
+    --stamp-green: #6E7681;    /* подработка accent (neutral steel) */
+    --stamp-amber: #F5B400;    /* смена accent — Amtel brand yellow */
+    --stamp-orange: #EF7D1F;   /* Amtel brand orange (logo ribbon) */
+    --shadow: 0 2px 6px rgba(0,0,0,0.18);
+    --lcd-bg: #FFFFFF;
+  }
+  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html,body{ margin:0; padding:0; height:100%; background:var(--paper); }
+  body{
+    font-family: 'Inter', -apple-system, sans-serif;
+    color: var(--ink);
+    background-image:
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 3px);
+    display:flex; justify-content:center;
+  }
+  #app{
+    width:100%; max-width:480px; min-height:100vh;
+    background:var(--paper);
+    display:flex; flex-direction:column;
+    position:relative;
+    padding-bottom:76px;
+  }
+  .storage-warning{
+    background:var(--stamp-red); color:#fff; font-size:12px; text-align:center;
+    padding:6px 10px; display:none; font-family:'Inter',sans-serif; font-weight:600;
+  }
+  .storage-warning.show{ display:block; }
+
+  header.top{
+    padding:20px 20px 16px; border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg, var(--paper-2), var(--paper));
+    position:relative;
+    display:flex; flex-direction:column; align-items:flex-start;
+  }
+  header.top::after{
+    content:""; position:absolute; left:0; right:0; bottom:-1px; height:3px;
+    background:linear-gradient(90deg, var(--stamp-amber), var(--stamp-orange));
+  }
+  .brand-logo{ display:none; }
+  .brand-word{width:100%; text-align:center; font-family:'Montserrat',sans-serif; font-weight:800; font-size:30px; letter-spacing:.18em; color:#fff; padding:4px 0 12px;}
+  .day-cell.workday{ background:var(--stamp-orange); border-color:var(--stamp-orange); color:#fff; }
+  .day-cell.workday .dots{ opacity:.9; }
+  .day-cell.workday.today{ outline-color:#fff; }
+  header.top .eyebrow{
+    font-family:'Inter', sans-serif; font-size:12px; letter-spacing:.03em;
+    color: var(--ink-soft);
+  }
+
+  section.view{ display:none; padding:18px 16px 8px; flex:1; }
+  section.view.active{ display:block; animation: fade .18s ease; }
+  @keyframes fade{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;} }
+
+  .month-nav{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .month-nav button{
+    background:var(--card); border:1px solid var(--line-oncard); border-radius:6px;
+    width:36px; height:36px; font-size:16px; color:var(--ink-oncard); cursor:pointer;
+  }
+  .month-nav .label{ font-family:'Montserrat',sans-serif; font-weight:700; font-size:18px; letter-spacing:.01em; color:var(--ink); }
+
+  .weekdays, .days-grid{ display:grid; grid-template-columns:repeat(7, 1fr); gap:6px; }
+  .weekdays{ margin-bottom:6px; }
+  .weekdays span{ text-align:center; font-family:'Inter',sans-serif; font-size:11px; color:var(--ink-soft); }
+  .day-cell{
+    aspect-ratio:1; background:var(--card); border:1px solid var(--line-oncard); border-radius:6px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    cursor:pointer; position:relative; box-shadow:var(--shadow); color:var(--ink-oncard);
+  }
+  .day-cell.empty{ visibility:hidden; }
+  .day-cell .num{ font-family:'Inter',sans-serif; font-weight:500; font-size:14px; font-variant-numeric:tabular-nums; }
+  .day-cell .dots{ display:flex; gap:3px; margin-top:3px; height:6px; }
+  .dot{ width:6px; height:6px; border-radius:1px; }
+  .dot.shift{ background:var(--stamp-amber); }
+  .dot.side{ background:var(--stamp-green); }
+  .day-cell.today{ outline:2px solid var(--stamp-amber); outline-offset:-2px; }
+
+  .hint{ font-size:12px; color:var(--ink-soft); margin-top:12px; line-height:1.5; }
+  .hint b.shift-dot,.hint b.side-dot{ display:inline-block; width:8px;height:8px;border-radius:1px; margin-right:3px; }
+  .hint b.shift-dot{ background:var(--stamp-amber); }
+  .hint b.side-dot{ background:var(--stamp-green); }
+
+  .card{ background:var(--card); border:1px solid var(--line-oncard); border-radius:8px; padding:14px 16px; box-shadow:var(--shadow); margin-bottom:12px; color:var(--ink-oncard); }
+  .card label.field-label{ color:var(--ink-oncard-soft); }
+  .row{ display:flex; gap:10px; }
+  .chip-group{ display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+  .chip{
+    flex:1; min-width:80px; text-align:center; padding:10px 8px;
+    border:1.5px solid var(--line); border-radius:6px; background:var(--paper-2);
+    font-family:'Montserrat',sans-serif; font-weight:600; font-size:14px; letter-spacing:.01em;
+    cursor:pointer; color:var(--ink);
+  }
+  .card .chip{ background:#F2F2F3; border-color:var(--line-oncard); color:var(--ink-oncard); }
+  .chip.selected{ border-color:var(--stamp-amber); background:var(--stamp-amber); color:#17171A; }
+  .chip.disabled{ opacity:.5; cursor:not-allowed; pointer-events:none; }
+  .chip.disabled .chip-note{ display:block; font-size:10px; font-weight:500; letter-spacing:.02em; margin-top:2px; text-transform:none; }
+  label.field-label{
+    font-family:'Inter',sans-serif; font-size:11px; letter-spacing:.06em;
+    text-transform:uppercase; color:var(--ink-soft); display:block; margin-bottom:6px;
+  }
+  input[type=number], input[type=date]{
+    width:100%; padding:10px 12px; border:1.5px solid var(--line-oncard); border-radius:6px;
+    font-family:'Inter',sans-serif; font-size:16px; background:#fff; color:var(--ink-oncard);
+  }
+  input:focus, .chip:focus-visible, .day-cell:focus-visible, button:focus-visible{
+    outline:2px solid var(--stamp-amber); outline-offset:1px;
+  }
+  .btn{ width:100%; padding:13px; border:none; border-radius:6px; cursor:pointer; font-family:'Montserrat',sans-serif; font-weight:700; font-size:15px; letter-spacing:.01em; }
+  .btn.primary{ background:var(--stamp-amber); color:#17171A; }
+  .btn.ghost{ background:transparent; border:1.5px solid var(--line); color:var(--ink); }
+  .btn.danger{ background:var(--stamp-red); color:#fff; }
+
+  .backdrop{ position:fixed; inset:0; background:rgba(0,0,0,0.55); display:none; align-items:flex-end; justify-content:center; z-index:20; }
+  .backdrop.active{ display:flex; }
+  .sheet{
+    background:var(--paper); width:100%; max-width:480px; border-radius:14px 14px 0 0;
+    padding:18px 18px 26px; max-height:86vh; overflow-y:auto;
+    border-top:3px solid var(--stamp-amber);
+    animation:slideup .2s ease;
+  }
+  @keyframes slideup{ from{ transform:translateY(30px); opacity:0;} to{ transform:none; opacity:1;} }
+  .sheet h2{ font-family:'Montserrat',sans-serif; font-weight:800; font-size:19px; margin:0 0 4px; color:var(--ink); }
+  .sheet .sub{ font-family:'Inter',sans-serif; font-size:12px; color:var(--ink-soft); margin-bottom:14px; }
+
+  .slip{
+    background:var(--card); border:1px solid var(--line-oncard); border-radius:8px;
+    padding:12px 14px; margin-bottom:9px; box-shadow:var(--shadow); color:var(--ink-oncard);
+    display:flex; align-items:center; gap:10px; border-left:3px solid var(--stamp-amber);
+  }
+  .slip.side{ border-left-color:var(--stamp-green); }
+  .slip.sick{ border-left-color:var(--ink-oncard-soft); opacity:.7; }
+  .slip .info{ flex:1; }
+  .slip .date{ font-family:'Inter',sans-serif; font-size:12px; color:var(--ink-oncard-soft); }
+  .slip .badge{ font-family:'Montserrat',sans-serif; font-weight:700; font-size:12px; text-transform:uppercase; letter-spacing:.02em; }
+  .slip .detail{ font-size:13px; margin-top:2px; color:var(--ink-oncard-soft); }
+  .slip .sum{ font-family:'Montserrat',sans-serif; font-weight:700; font-size:16px; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  .slip .del{ background:none; border:none; color:var(--stamp-red); font-size:18px; cursor:pointer; padding:4px 6px; }
+  .empty-state{ text-align:center; color:var(--ink-soft); font-size:13px; padding:40px 10px; }
+
+  .total-card{
+    border-radius:8px; padding:16px; margin-bottom:10px; color:var(--ink-oncard);
+    background:var(--card); border:1px solid var(--line-oncard); box-shadow:var(--shadow);
+    border-left:4px solid var(--stamp-amber);
+  }
+  .total-card.side{ border-left-color:var(--stamp-green); }
+  .total-card.grand{ color:#fff; background:linear-gradient(135deg,#232326,#17171A); border-color:var(--line); border-left-color:var(--stamp-orange); }
+  .total-card .t-label{ font-family:'Inter',sans-serif; text-transform:uppercase; font-size:12px; letter-spacing:.06em; color:var(--ink-oncard-soft); }
+  .total-card.grand .t-label{ color:var(--ink-soft); }
+  .total-card .t-value{ font-family:'Montserrat',sans-serif; font-size:27px; font-weight:800; margin-top:4px; font-variant-numeric:tabular-nums; }
+  .total-card .t-sub{ font-family:'Inter',sans-serif; font-size:12px; margin-top:6px; color:var(--ink-oncard-soft); }
+  .total-card.grand .t-sub{ color:var(--ink-soft); }
+
+  nav.tabbar{
+    position:fixed; bottom:0; left:50%; transform:translateX(-50%);
+    width:100%; max-width:480px; background:var(--paper-2); border-top:1px solid var(--line);
+    display:flex; padding:8px 4px calc(8px + env(safe-area-inset-bottom)); z-index:10;
+  }
+  nav.tabbar button{
+    flex:1; background:none; border:none; display:flex; flex-direction:column; align-items:center; gap:3px;
+    padding:6px 2px; cursor:pointer; color:var(--ink-soft);
+    font-family:'Inter',sans-serif; font-size:10.5px; font-weight:500; letter-spacing:.02em;
+  }
+  nav.tabbar button svg{ width:20px; height:20px; }
+  nav.tabbar button.active{ color:var(--stamp-amber); }
+
+  .toast{
+    position:fixed; bottom:90px; left:50%; transform:translateX(-50%);
+    background:var(--stamp-amber); color:#17171A; padding:10px 18px; border-radius:6px;
+    font-family:'Montserrat',sans-serif; font-weight:700;
+    font-size:13px; z-index:40; opacity:0; pointer-events:none; transition:opacity .2s;
+  }
+  .toast.show{ opacity:1; }
+
+  /* AMTEL 2.0 dashboard */
+    .home-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}.mini-card{background:var(--card);color:var(--ink-oncard);padding:14px;border-radius:10px;border:1px solid var(--line-oncard);box-shadow:var(--shadow)}.mini-card .n{font-family:Montserrat,sans-serif;font-weight:800;font-size:20px;margin-top:4px}.goal-name{font-family:Montserrat,sans-serif;font-weight:800;font-size:17px}.muted{font-size:12px;color:var(--ink-oncard-soft);margin-top:5px}.home-action{margin-bottom:12px}.expense-row{display:flex;gap:8px;margin-top:8px}.expense-row input{flex:1}.expense-row button{width:44px;border:0;border-radius:6px;background:var(--stamp-red);color:#fff;font-weight:800}.empty-goal{padding:20px;text-align:center;color:var(--ink-soft)}
+
+/* AMTEL Warehouse 2.2 */
+.productivity{margin-top:16px}.prod-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.prod-card{background:var(--card);color:var(--ink-oncard);border-radius:10px;padding:14px;border:1px solid var(--line-oncard)}.prod-card b{display:block;font-family:Montserrat,sans-serif;font-size:22px;margin-top:4px}.prod-label{font-size:12px;color:var(--ink-oncard-soft)}
+
+  .auth-overlay{position:fixed;inset:0;z-index:9999;background:var(--paper);display:flex;align-items:center;justify-content:center;padding:24px}.auth-card{width:min(420px,100%);background:var(--card);color:var(--ink-oncard);border-radius:20px;padding:28px;box-shadow:var(--shadow)}.auth-brand{text-align:center;font-family:Montserrat,sans-serif;font-weight:800;font-size:32px;letter-spacing:.08em;margin-bottom:8px}.auth-sub{text-align:center;color:var(--ink-oncard-soft);font-size:14px;margin-bottom:22px}.auth-card input{width:100%;padding:14px;border:1px solid var(--line-oncard);border-radius:10px;margin:7px 0;font-size:16px}.auth-card button{width:100%;padding:14px;border:0;border-radius:10px;background:var(--stamp-orange);color:#fff;font-weight:700;font-size:16px;margin-top:10px}.auth-switch{background:transparent!important;color:var(--ink-oncard)!important;border:1px solid var(--line-oncard)!important}.auth-msg{min-height:20px;font-size:13px;text-align:center;margin-top:10px;color:var(--stamp-red)}
+</style>
+</head>
+<body>
+<div class="auth-overlay" id="authOverlay"><div class="auth-card"><div class="auth-brand">AMTEL</div><div class="auth-sub" id="authTitle">Войди, чтобы синхронизировать смены между устройствами</div><input id="authEmail" type="email" placeholder="Email"><input id="authPassword" type="password" placeholder="Пароль (минимум 6 символов)"><button id="authSubmit">Войти</button><button class="auth-switch" id="authSwitch">Создать аккаунт</button><div class="auth-msg" id="authMsg"></div></div></div>
+<div id="app">
+  <div class="storage-warning" id="storageWarning">Демо-режим: открой это приложение через Telegram-бота, чтобы данные сохранялись.</div>
+
+  <header class="top">
+    <div class="brand-word">АМТЕЛ</div>
+    <div class="eyebrow" id="greeting">Журнал смен · упаковка · сборка · подработка</div>
+  </header>
+
+
+  <section class="view active" id="view-home">
+    <div id="homeContent"></div>
+    <div class="month-nav" style="margin-top:18px">
+      <button id="prevMonthSum" aria-label="Предыдущий месяц">‹</button>
+      <div class="label" id="monthLabelSum">Август 2026</div>
+      <button id="nextMonthSum" aria-label="Следующий месяц">›</button>
+    </div>
+    <div id="summaryTotals"></div>
+  <div class="productivity"><div class="month-nav"><div class="label">📦 Продуктивность</div></div><div class="prod-grid" id="prodGrid"></div></div></section>
+  <section class="view" id="view-calendar">
+    <div class="month-nav">
+      <button id="prevMonth" aria-label="Предыдущий месяц">‹</button>
+      <div class="label" id="monthLabel">Август 2026</div>
+      <button id="nextMonth" aria-label="Следующий месяц">›</button>
+    </div>
+    <div class="weekdays"><span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span></div>
+    <div class="days-grid" id="daysGrid"><div class="day-cell empty"></div><div class="day-cell empty"></div><div class="day-cell empty"></div><div class="day-cell empty"></div><div class="day-cell empty"></div><div class="day-cell" tabindex="0"><span class="num">1</span><div class="dots"></div></div><div class="day-cell" tabindex="0"><span class="num">2</span><div class="dots"></div></div><div class="day-cell" tabindex="0"><span class="num">3</span><div class="dots"></div></div><div class="day-cell" tabindex="0"><span class="num">4</span><div class="dots"></div></div><div class="day-cell" tabindex="0"><span class="num">5</span><div class="dots"></div></div><div class="day-cell" tabindex="0"><span class="num">6</span><div class="dots"></div></div><div class="day-cell" tabindex="0"><span class="num">7</span><div class="dots"></div></div><div class="day-cell" tabindex="0"><span class="num">8</span><div class="dots"></div></div><div class="day-cell" tabindex="0"><span class="num">9</span><div class="dots"></div></div><div class="day-cell" tabindex="0"><span class="num">10</span><div class="dots"></div></div><div class="day-cell" tabindex="0"><span class="num">11</span><div class="dots"></div></div><div class="day-cell" tabindex="0"><span class="num">12</span><div class="dots"></div></div><div class="day-cell" tabindex="0"><span class="num">13</span><div class="dots"></div></div><div class="day-cell" tabindex="0"><span class="num">14</span><div class="dots"></div></div><div class="day-cell" tabindex="0"><span class="num">15</span><div class="dots"></div></div><div class="day-cell" tabindex="0"><span class="num">16</span><div class="dots"></div></div><div class="day-cell" tabindex="0"><span class="num">17</span><div class="dots"></div></div><div class="day-cell" tabindex="0"><span class="num">18</span><div class="dots"></div></div><div class="day-cell" tabindex="0"><span class="num">19</span><div class="dots"></div></div><div class="day-cell" tabindex="0"><span class="num">20</span><div class="dots"></div></div><div class="day-cell" tabindex="0"><span class="num">21</span><div class="dots"></div></div><div class="day-cell" tabindex="0"><span class="num">22</span><div class="dots"></div></div><div class="day-cell today" tabindex="0"><span class="num">23</span><div class="dots"></div></div><div class="day-cell" tabindex="0"><span class="num">24</span><div class="dots"></div></div><div class="day-cell" tabindex="0"><span class="num">25</span><div class="dots"></div></div><div class="day-cell" tabindex="0"><span class="num">26</span><div class="dots"></div></div><div class="day-cell" tabindex="0"><span class="num">27</span><div class="dots"></div></div><div class="day-cell" tabindex="0"><span class="num">28</span><div class="dots"></div></div><div class="day-cell" tabindex="0"><span class="num">29</span><div class="dots"></div></div><div class="day-cell" tabindex="0"><span class="num">30</span><div class="dots"></div></div><div class="day-cell" tabindex="0"><span class="num">31</span><div class="dots"></div></div></div>
+    <div class="hint">
+      <b class="shift-dot"></b>смена &nbsp; <b class="side-dot"></b>подработка<br>
+      Нажми на день, чтобы добавить запись. На одну дату можно добавить и смену, и подработку.
+    </div>
+  </section>
+
+  <section class="view" id="view-history"><div id="historyList"><div class="empty-state">Пока нет записей.<br>Добавь первую смену на вкладке «Календарь».</div></div></section>
+
+  <section class="view" id="view-settings">
+    <div class="card">
+      <label class="field-label">Моё подразделение</label>
+      <div id="homeDivisionDisplay" style="font-family:'Montserrat',sans-serif; font-weight:700; font-size:16px; margin-top:4px;">—</div>
+      <button class="btn ghost" id="changeHomeDivBtn" style="margin-top:10px;">Изменить</button>
+    </div>
+    <div class="card">
+      <label class="field-label">Налог с зарплаты за смены</label>
+      <div class="chip-group">
+        <div class="chip" id="taxOff">Выключен</div>
+        <div class="chip" id="taxOn">Включён</div>
+      </div>
+      <input type="number" id="taxPercentInput" placeholder="процент, напр. 13" min="0" max="100" style="margin-top:10px;">
+      <div class="hint" style="margin-top:6px;">Применяется только к сменам (упаковка/сборка/дилер), подработку не трогает.</div>
+    </div>
+    <div class="card">
+      <label class="field-label">Питание за выбранный месяц</label>
+      <div class="chip-group">
+        <div class="chip" id="foodOff">Выключено</div>
+        <div class="chip" id="foodOn">Включено</div>
+      </div>
+      <input type="month" id="foodMonthInput" style="margin-top:10px;">
+      <input type="number" id="foodAmountInput" placeholder="сумма в рублях, напр. 2000" min="0" step="1" style="margin-top:10px;">
+      <div class="hint" style="margin-top:6px;">Для каждого месяца можно указать свою сумму. Итог месяца вычтет именно её.</div>
+    </div>
+    <button class="btn danger" id="resetBtn">Очистить все данные</button>
+  </section>
+
+  <nav class="tabbar">
+    <button class="tab-btn active" data-view="home">⌂<span>Главная</span></button>
+    <button class="tab-btn" data-view="calendar">▦<span>Календарь</span></button>
+    <button class="tab-btn" data-view="history">☷<span>История</span></button>
+    <button class="tab-btn" data-view="settings">⚙<span>Настройки</span></button>
+  </nav>
+</div>
+
+<div class="backdrop" id="sheetBackdrop"><div class="sheet" id="sheetContent"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- Telegram Mini App init ----------
+  const tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
+  if(tg){
+    try{
+      tg.ready();
+      tg.expand();
+      tg.setHeaderColor && tg.setHeaderColor('#17171A');
+      tg.setBackgroundColor && tg.setBackgroundColor('#17171A');
+    }catch(e){ /* older client, ignore */ }
+  }
+
+  // ---------- локальное хранилище + облачная синхронизация Supabase ----------
+  const SUPABASE_URL = 'https://wubnshrajpchujzknyl.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_JOou_ubggTY2A6eOXNCSPw_vS6E8ErJ';
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  const StorageAdapter = { mode:'local', async get(key){ return localStorage.getItem(key); }, async set(key,value){ localStorage.setItem(key,value); return true; } };
+  let CURRENT_USER = null;
+
+
+
+  // personalize header with the Telegram user's name, so it's clear the data is theirs
+  (function setGreeting(){
+    try{
+      const u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+      if(u && u.first_name){
+        document.getElementById('greeting').textContent = `Привет, ${u.first_name} 👋 — это твой личный журнал`;
+      }
+    }catch(e){ /* keep default eyebrow text */ }
+  })();
+
+  // ---------- constants (mirrors bot.py) ----------
+  // Тарифы: подразделение -> подтип -> {hour, line}
+  const RATES = {
+    "упаковка": {
+      "опт":     {hour:240.0, line:3.3},
+      "москва":  {hour:240.0, line:4.3},
+      "магазин": {hour:240.0, line:2.0},
+    },
+    "сборка": {
+      "дилер":   {hour:150.0, line:7.0},
+      // "обычная" сборка использует формулу с бонусом ниже, не входит в эту таблицу
+    },
+  };
+  const PAY_PER_HOUR_ASM = 450.0;
+  const BASE_LINE_ASM = 1.0;
+  const ASM_BRACKETS = [[600,0.5],[700,0.7],[900,1.0],[Infinity,1.3]];
+  const SIDE_JOB_BONUS_PER_SHIFT = 1000.0;
+  const TYPE_LABEL = {shift:"Смена", side:"Подработка"};
+  const DIVISION_LABEL = {"упаковка":"Упаковка", "сборка":"Сборка"};
+  const SUBTYPE_LABEL = {"опт":"Опт", "москва":"Москва", "магазин":"Магазин", "дилер":"Дилер", "обычная":"Обычная сборка"};
+  const MONTH_NAMES=["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
+
+  function fullLabel(division, subtype){
+    if(!division) return "—";
+    const d = DIVISION_LABEL[division] || division;
+    const s = subtype ? (SUBTYPE_LABEL[subtype] || subtype) : null;
+    return s ? `${d} (${s})` : d;
+  }
+
+  let DATA = { settings:{homeDivision:null, taxEnabled:false, taxPercent:0, foodEnabled:false, foodAmount:0, foodByMonth:{}, scheduleStart:null, expensesByMonth:{}}, shifts:{} };
+  let calView = new Date(); calView.setDate(1);
+  let sumView = new Date(); sumView.setDate(1);
+  let pendingEntry = null;
+
+  const el = (id)=>document.getElementById(id);
+
+  function toast(msg){
+    const t = el('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toast._h); toast._h = setTimeout(()=>t.classList.remove('show'), 1800);
+  }
+  function fmtDate(d){
+    const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${dd}`;
+  }
+  function parseDate(s){ const [y,m,d]=s.split('-').map(Number); return new Date(y, m-1, d); }
+  function daysInMonth(y,m){ return new Date(y, m+1, 0).getDate(); }
+
+  function asmMultiplier(lines){ for(const [limit,mult] of ASM_BRACKETS){ if(lines<=limit) return mult; } return 1.0; }
+  function calcSalary(division, subtype, hours, lines, sick, type){
+    if(sick) return 0;
+    let salary = 0;
+    if(division==="сборка" && subtype!=="дилер"){
+      const base = hours*PAY_PER_HOUR_ASM;
+      const bonus = lines*BASE_LINE_ASM*asmMultiplier(lines);
+      salary = base+bonus;
+    } else {
+      const rate = (RATES[division] && RATES[division][subtype]) || null;
+      if(rate) salary = hours*rate.hour + lines*rate.line;
+    }
+    if(type==="side") salary += SIDE_JOB_BONUS_PER_SHIFT;
+    return salary;
+  }
+
+  async function loadData(){
+    const defaults = {homeDivision:null, taxEnabled:false, taxPercent:0, foodEnabled:false, foodAmount:0, foodByMonth:{}, scheduleStart:null, expensesByMonth:{}};
+    if(!CURRENT_USER) return;
+    const [{data:settings},{data:shifts},{data:food}] = await Promise.all([
+      supabase.from('user_settings').select('*').eq('user_id',CURRENT_USER.id).maybeSingle(),
+      supabase.from('shifts').select('*').eq('user_id',CURRENT_USER.id),
+      supabase.from('monthly_food').select('*').eq('user_id',CURRENT_USER.id)
+    ]);
+    DATA={settings:{...defaults},shifts:{}};
+    if(settings) DATA.settings={...defaults,homeDivision:settings.home_division,scheduleStart:settings.schedule_start_date,taxEnabled:settings.tax_enabled,taxPercent:Number(settings.tax_percent||0),foodEnabled:settings.food_enabled};
+    (food||[]).forEach(r=>{DATA.settings.foodByMonth[r.month.slice(0,7)]=Number(r.amount||0);});
+    (shifts||[]).forEach(r=>{const d=r.shift_date; DATA.shifts[d]=DATA.shifts[d]||{}; DATA.shifts[d][r.shift_type]={hours:Number(r.hours||0),lines:r.lines||0,salary:Number(r.salary||0),division:r.division,subtype:r.subtype,sick:!!r.sick};});
+  }
+  async function saveData(){
+    if(!CURRENT_USER) return false;
+    const s=DATA.settings;
+    const {error:e1}=await supabase.from('user_settings').upsert({user_id:CURRENT_USER.id,home_division:s.homeDivision,schedule_start_date:s.scheduleStart,tax_enabled:!!s.taxEnabled,tax_percent:s.taxPercent||0,food_enabled:!!s.foodEnabled,updated_at:new Date().toISOString()});
+    if(e1){ toast('Ошибка сохранения: '+e1.message); return false; }
+    const rows=[]; Object.entries(DATA.shifts).forEach(([date,day])=>['shift','side'].forEach(type=>{const x=day[type]; if(x) rows.push({user_id:CURRENT_USER.id,shift_date:date,shift_type:type,division:x.division||null,subtype:x.subtype||null,hours:x.hours||0,lines:x.lines||0,salary:x.salary||0,sick:!!x.sick,updated_at:new Date().toISOString()});}));
+    const {error:e2}=await supabase.from('shifts').delete().eq('user_id',CURRENT_USER.id); if(!e2 && rows.length) await supabase.from('shifts').insert(rows);
+    const foodRows=Object.entries(s.foodByMonth||{}).map(([month,amount])=>({user_id:CURRENT_USER.id,month:month+'-01',amount:Number(amount)||0,updated_at:new Date().toISOString()}));
+    await supabase.from('monthly_food').delete().eq('user_id',CURRENT_USER.id); if(foodRows.length) await supabase.from('monthly_food').insert(foodRows);
+    localStorage.setItem('app-data',JSON.stringify(DATA));
+    return true;
+  }
+
+
+  async function finalizeEntry(dateStr, type, division, subtype, hours, lines, sick){
+    const salary = calcSalary(division, subtype, hours, lines, sick, type);
+    const day = DATA.shifts[dateStr] || {};
+    if(day[type] && !sick){
+      day[type].lines = (day[type].lines||0) + lines;
+      day[type].salary = (day[type].salary||0) + salary;
+      day[type].hours = hours;
+      day[type].division = division;
+      day[type].subtype = subtype;
+    } else {
+      day[type] = {hours, lines, salary, division, subtype, sick: !!sick};
+    }
+    DATA.shifts[dateStr] = day;
+    await saveData();
+    return salary;
+  }
+  async function deleteEntry(dateStr, type){
+    if(!DATA.shifts[dateStr]) return;
+    delete DATA.shifts[dateStr][type];
+    if(Object.keys(DATA.shifts[dateStr]).length===0) delete DATA.shifts[dateStr];
+    await saveData();
+    renderAll();
+  }
+
+  function isWorkday2on2(startDate, day){
+    let delta = Math.round((day - startDate)/86400000);
+    if(delta<0) delta = ((delta%4)+4)%4;
+    return (delta%4)===0 || (delta%4)===1;
+  }
+
+  function renderCalendar(){
+    const y = calView.getFullYear(), m = calView.getMonth();
+    el('monthLabel').textContent = `${MONTH_NAMES[m]} ${y}`;
+    const grid = el('daysGrid'); grid.innerHTML = '';
+    const firstWeekday = (new Date(y,m,1).getDay()+6)%7;
+    for(let i=0;i<firstWeekday;i++){ const f=document.createElement('div'); f.className='day-cell empty'; grid.appendChild(f); }
+    const total = daysInMonth(y,m);
+    const todayStr = fmtDate(new Date());
+    for(let d=1; d<=total; d++){
+      const dateObj = new Date(y,m,d);
+      const dateStr = fmtDate(dateObj);
+      const cell = document.createElement('div');
+      cell.className='day-cell';
+      if(DATA.settings.scheduleStart && isWorkday2on2(parseDate(DATA.settings.scheduleStart), dateObj)) cell.classList.add('workday');
+      if(dateStr===todayStr) cell.classList.add('today');
+      const entries = DATA.shifts[dateStr] || {};
+      let dotsHtml = '<div class="dots">';
+      if(entries.shift) dotsHtml += '<span class="dot shift"></span>';
+      if(entries.side) dotsHtml += '<span class="dot side"></span>';
+      dotsHtml += '</div>';
+      cell.innerHTML = `<span class="num">${d}</span>${dotsHtml}`;
+      cell.tabIndex = 0;
+      cell.addEventListener('click', ()=>openDaySheet(dateStr));
+      grid.appendChild(cell);
+    }
+  }
+  function shiftMonth(dateObj, delta){ const d = new Date(dateObj); d.setMonth(d.getMonth()+delta); d.setDate(1); return d; }
+
+  function openSheet(html){ el('sheetContent').innerHTML = html; el('sheetBackdrop').classList.add('active'); }
+  function closeSheet(){ el('sheetBackdrop').classList.remove('active'); pendingEntry = null; }
+  let onboardingActive = false;
+  el('sheetBackdrop').addEventListener('click', (e)=>{ if(onboardingActive) return; if(e.target===el('sheetBackdrop')) closeSheet(); });
+
+  // ---------- онбординг: подразделение спрашивается один раз ----------
+  let onboardingChoice = {};
+  function maybeShowOnboarding(){
+    if(!DATA.settings.scheduleStart || !DATA.settings.homeDivision){
+      showOnboarding();
+    }
+  }
+  function showOnboarding(){
+    onboardingActive = true;
+    onboardingChoice = {};
+    if(!DATA.settings.scheduleStart) renderOnboardingSchedule(); else renderOnboardingStep1();
+    el('sheetBackdrop').classList.add('active');
+  }
+  function renderOnboardingSchedule(){
+    el('sheetContent').innerHTML = `
+      <h2>График 2/2</h2>
+      <div class="sub">С какого числа начинается твоя первая смена? После этого рабочие дни автоматически будут отмечены оранжевым.</div>
+      <input type="date" id="obScheduleStart" value="${fmtDate(new Date())}">
+      <button class="btn primary" id="obScheduleSave" style="margin-top:12px;">Продолжить</button>`;
+    el('obScheduleSave').addEventListener('click', async ()=>{
+      const v=el('obScheduleStart').value; if(!v){toast('Выбери дату');return;}
+      DATA.settings.scheduleStart=v; await saveData(); renderOnboardingStep1(); renderCalendar();
+    });
+  }
+  function renderOnboardingStep1(){
+    el('sheetContent').innerHTML = `
+      <h2>Добро пожаловать!</h2>
+      <div class="sub">Укажи своё подразделение — спросим один раз, дальше не будем. Направление (опт/москва/магазин или дилер) будем уточнять при каждой смене — мало ли перекинут на другую точку.</div>
+      <div class="chip-group" style="margin-top:10px;">
+        <div class="chip" id="obDivPack">Упаковка</div>
+        <div class="chip" id="obDivAsm">Сборка</div>
+      </div>
+    `;
+    el('obDivPack').addEventListener('click', ()=>saveHomeDivision('упаковка'));
+    el('obDivAsm').addEventListener('click', ()=>saveHomeDivision('сборка'));
+  }
+  async function saveHomeDivision(division){
+    DATA.settings.homeDivision = division;
+    await saveData();
+    onboardingActive = false;
+    el('sheetBackdrop').classList.remove('active');
+    toast('Подразделение сохранено');
+    renderAll();
+  }
+
+  function subtypeOptionsFor(division){
+    return division==='упаковка'
+      ? [['опт','Опт'],['москва','Москва'],['магазин','Магазин']]
+      : [['дилер','Дилер'],['обычная','Обычная сборка']];
+  }
+  function subtypeChipsHtml(division){
+    const isPack = division==='упаковка';
+    return subtypeOptionsFor(division).map(([val,label])=>{
+      const disabled = (!isPack && val==='обычная');
+      return `<div class="chip${disabled?' disabled':''}" data-sub="${val}">${label}${disabled?'<span class="chip-note">В разработке</span>':''}</div>`;
+    }).join('');
+  }
+
+  function openDaySheet(dateStr){
+    pendingEntry = {date: dateStr};
+    openSheet(`
+      <h2>${dateStr}</h2>
+      <div class="sub">Это смена или подработка?</div>
+      <div class="row" style="margin-top:6px;">
+        <div class="chip" style="flex:1;" id="pickShift">🔧 Смена</div>
+        <div class="chip" style="flex:1;" id="pickSide">💼 Подработка</div>
+      </div>
+      <button class="btn ghost" style="margin-top:14px;" id="sheetCancel">Отмена</button>
+    `);
+    el('pickShift').addEventListener('click', ()=>openDetailSheet('shift'));
+    el('pickSide').addEventListener('click', ()=>openDetailSheet('side'));
+    el('sheetCancel').addEventListener('click', closeSheet);
+  }
+
+  function openDetailSheet(type){
+    pendingEntry.type = type;
+    pendingEntry.hours = 14;
+    pendingEntry.subtype = null;
+    if(type === 'shift'){
+      // подразделение фиксировано настройками сотрудника, но направление
+      // (опт/москва/магазин или дилер) спрашиваем каждый раз — могли перекинуть
+      pendingEntry.division = DATA.settings.homeDivision;
+      renderShiftSubtypePicker();
+    } else {
+      // подработка — можно выбрать любое подразделение и направление каждый раз
+      pendingEntry.division = null;
+      renderSidePicker();
+    }
+  }
+
+  function renderShiftSubtypePicker(){
+    const t = pendingEntry;
+    openSheet(`
+      <h2>${DIVISION_LABEL[t.division] || t.division}</h2>
+      <div class="sub">${t.date} · уточни направление</div>
+      <div class="chip-group" style="margin-top:10px;">${subtypeChipsHtml(t.division)}</div>
+      <button class="btn ghost" id="sheetCancel2" style="margin-top:14px;">Отмена</button>
+    `);
+    el('sheetContent').querySelectorAll('[data-sub]').forEach(chip=>{
+      chip.addEventListener('click', ()=>{
+        if(chip.classList.contains('disabled')) return;
+        t.subtype = chip.dataset.sub;
+        renderEntryDetail();
+      });
+    });
+    el('sheetCancel2').addEventListener('click', closeSheet);
+  }
+
+  function renderSidePicker(){
+    const t = pendingEntry;
+    if(!t.division){
+      openSheet(`
+        <h2>Подработка</h2>
+        <div class="sub">${t.date} · выбери подразделение</div>
+        <div class="chip-group" style="margin-top:10px;">
+          <div class="chip" id="sideDivPack">Упаковка</div>
+          <div class="chip" id="sideDivAsm">Сборка</div>
+        </div>
+        <button class="btn ghost" id="sheetCancel2" style="margin-top:14px;">Отмена</button>
+      `);
+      el('sideDivPack').addEventListener('click', ()=>{ t.division='упаковка'; renderSidePicker(); });
+      el('sideDivAsm').addEventListener('click', ()=>{ t.division='сборка'; renderSidePicker(); });
+      el('sheetCancel2').addEventListener('click', closeSheet);
+      return;
+    }
+    if(!t.subtype){
+      openSheet(`
+        <h2>${DIVISION_LABEL[t.division] || t.division}</h2>
+        <div class="sub">${t.date} · уточни направление</div>
+        <div class="chip-group" style="margin-top:10px;">${subtypeChipsHtml(t.division)}</div>
+        <button class="btn ghost" id="sideBack" style="margin-top:14px;">Назад</button>
+      `);
+      el('sheetContent').querySelectorAll('[data-sub]').forEach(chip=>{
+        chip.addEventListener('click', ()=>{
+          if(chip.classList.contains('disabled')) return;
+          t.subtype = chip.dataset.sub;
+          renderEntryDetail();
+        });
+      });
+      el('sideBack').addEventListener('click', ()=>{ t.division=null; renderSidePicker(); });
+      return;
+    }
+  }
+
+  function renderEntryDetail(){
+    const t = pendingEntry;
+    const sickRow = t.type==='shift' ? `<button class="btn ghost" id="sickBtn" style="margin-top:10px;">Больничный (не оплачив.)</button>` : '';
+    const changeLink = t.type==='side' ? `<button class="btn ghost" id="changeSideDiv" style="margin-top:8px;">Сменить подразделение</button>` : '';
+    openSheet(`
+      <h2>${TYPE_LABEL[t.type]}</h2>
+      <div class="sub">${t.date} · ${fullLabel(t.division, t.subtype)}</div>
+      <label class="field-label">Длительность</label>
+      <div class="chip-group">
+        <div class="chip ${t.hours===12?'selected':''}" data-hrs="12">12 ч</div>
+        <div class="chip ${t.hours===14?'selected':''}" data-hrs="14">14 ч</div>
+      </div>
+      <input type="number" id="hoursManual" placeholder="или своё число часов (макс. 15)" min="1" max="15" value="${(t.hours!==12 && t.hours!==14) ? t.hours : ''}" style="margin-top:8px;">
+      <label class="field-label" style="margin-top:12px;">Количество строк</label>
+      <input type="number" id="linesManual" placeholder="введи число строк" min="1" max="5000">
+      <button class="btn primary" id="saveLinesBtn" style="margin-top:10px;">Сохранить</button>
+      ${sickRow}
+      ${changeLink}
+      <button class="btn ghost" style="margin-top:10px;" id="sheetCancel2">Отмена</button>
+    `);
+    el('sheetContent').querySelectorAll('[data-hrs]').forEach(chip=>{
+      chip.addEventListener('click', ()=>{ pendingEntry.hours = Number(chip.dataset.hrs); renderEntryDetail(); });
+    });
+    el('hoursManual').addEventListener('change', (e)=>{
+      let v = Number(e.target.value);
+      if(!v || v<1){ return; }
+      if(v>15){ v = 15; toast('Максимум 15 часов'); }
+      pendingEntry.hours = v;
+      renderEntryDetail();
+    });
+    el('saveLinesBtn').addEventListener('click', async ()=>{
+      const v = Number(el('linesManual').value);
+      if(!v || v<1 || v>5000){ toast('Введи число строк от 1 до 5000'); return; }
+      await commitEntry(v);
+    });
+    if(el('sickBtn')){
+      el('sickBtn').addEventListener('click', async ()=>{
+        await finalizeEntry(pendingEntry.date, 'shift', pendingEntry.division, pendingEntry.subtype, 0, 0, true);
+        toast(`${pendingEntry.date}: больничный`);
+        closeSheet(); renderAll();
+      });
+    }
+    if(el('changeSideDiv')){
+      el('changeSideDiv').addEventListener('click', ()=>{
+        pendingEntry.division = null; pendingEntry.subtype = null; renderSidePicker();
+      });
+    }
+    el('sheetCancel2').addEventListener('click', closeSheet);
+  }
+  async function commitEntry(lines){
+    const t = pendingEntry;
+    const salary = await finalizeEntry(t.date, t.type, t.division, t.subtype, t.hours, lines, false);
+    toast(`${TYPE_LABEL[t.type]} сохранена: ${salary.toFixed(0)} ₽`);
+    closeSheet();
+    renderAll();
+  }
+
+  function renderHistory(){
+    const list = el('historyList');
+    const rows = [];
+    Object.keys(DATA.shifts).sort().reverse().forEach(dateStr=>{
+      const day = DATA.shifts[dateStr];
+      ['shift','side'].forEach(type=>{ const info = day[type]; if(info) rows.push({dateStr, type, info}); });
+    });
+    if(rows.length===0){
+      list.innerHTML = `<div class="empty-state">Пока нет записей.<br>Добавь первую смену на вкладке «Календарь».</div>`;
+      return;
+    }
+    list.innerHTML = rows.map(r=>{
+      const cls = r.info.sick ? 'sick' : (r.type==='side' ? 'side':'');
+      const detail = r.info.sick ? 'Больничный (не оплачивается)' : `${fullLabel(r.info.division, r.info.subtype)}, ${r.info.hours}ч, строк ${r.info.lines}`;
+      return `<div class="slip ${cls}">
+        <div class="info">
+          <div class="date">${r.dateStr} · <span class="badge">${TYPE_LABEL[r.type]}</span></div>
+          <div class="detail">${detail}</div>
+        </div>
+        <div class="sum">${Math.round(r.info.salary)} ₽</div>
+        <button class="del" data-date="${r.dateStr}" data-type="${r.type}" aria-label="Удалить">✕</button>
+      </div>`;
+    }).join('');
+    list.querySelectorAll('.del').forEach(btn=>{
+      btn.addEventListener('click', ()=>{ deleteEntry(btn.dataset.date, btn.dataset.type); toast('Запись удалена'); });
+    });
+  }
+
+  function renderSummary(){
+    const y = sumView.getFullYear(), m = sumView.getMonth();
+    el('monthLabelSum').textContent = `${MONTH_NAMES[m]} ${y}`;
+    const start = new Date(y,m,1), end = new Date(y,m,daysInMonth(y,m));
+    const totals = { shift:{count:0,lines:0,salary:0}, side:{count:0,lines:0,salary:0} };
+    Object.keys(DATA.shifts).forEach(dateStr=>{
+      const d = parseDate(dateStr);
+      if(d<start || d>end) return;
+      const day = DATA.shifts[dateStr];
+      ['shift','side'].forEach(type=>{
+        const info = day[type]; if(!info) return;
+        if(!info.sick) totals[type].count++;
+        totals[type].lines += info.lines||0;
+        totals[type].salary += info.salary||0;
+      });
+    });
+
+    const s = DATA.settings;
+    const taxAmount = s.taxEnabled ? totals.shift.salary * (Number(s.taxPercent)||0) / 100 : 0;
+    const monthKey = `${y}-${String(m+1).padStart(2,'0')}`;
+    const foodAmount = s.foodEnabled ? (Number((s.foodByMonth||{})[monthKey] ?? s.foodAmount)||0) : 0;
+    const shiftAfterDeductions = Math.max(0, totals.shift.salary - taxAmount - foodAmount);
+    const grand = shiftAfterDeductions + totals.side.salary;
+
+    const box = el('summaryTotals');
+    if(totals.shift.count===0 && totals.side.count===0 && grand===0){
+      box.innerHTML = `<div class="empty-state">За ${MONTH_NAMES[m].toLowerCase()} ${y} нет оплачиваемых записей.</div>`;
+      return;
+    }
+
+    let shiftSub = `${totals.shift.count} шт. · строк ${totals.shift.lines}`;
+    if(taxAmount>0 || foodAmount>0){
+      const parts = [];
+      if(taxAmount>0) parts.push(`налог ${s.taxPercent}% −${Math.round(taxAmount)} ₽`);
+      if(foodAmount>0) parts.push(`питание −${Math.round(foodAmount)} ₽`);
+      shiftSub += ` · до вычетов ${Math.round(totals.shift.salary)} ₽ · ${parts.join(' · ')}`;
+    }
+
+    box.innerHTML = `
+      <div class="total-card shift">
+        <div class="t-label">🔧 Смены</div>
+        <div class="t-value">${Math.round(shiftAfterDeductions)} ₽</div>
+        <div class="t-sub">${shiftSub}</div>
+      </div>
+      <div class="total-card side">
+        <div class="t-label">💼 Подработки</div>
+        <div class="t-value">${Math.round(totals.side.salary)} ₽</div>
+        <div class="t-sub">${totals.side.count} шт. · строк ${totals.side.lines}</div>
+      </div>
+      <div class="total-card grand">
+        <div class="t-label">Итого к выплате</div>
+        <div class="t-value">${Math.round(grand)} ₽</div>
+        <div class="t-sub">Период: 1 — ${daysInMonth(y,m)} ${MONTH_NAMES[m].toLowerCase()}</div>
+      </div>
+    `;
+  }
+
+  function monthKeyOf(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
+  function monthMoney(dateObj){
+    const y=dateObj.getFullYear(),m=dateObj.getMonth(), key=monthKeyOf(dateObj);
+    let shift=0,side=0,hours=0,count=0;
+    Object.entries(DATA.shifts).forEach(([ds,day])=>{const d=parseDate(ds);if(d.getFullYear()!==y||d.getMonth()!==m)return;['shift','side'].forEach(t=>{const i=day[t];if(!i||i.sick)return;if(t==='shift')shift+=i.salary||0;else side+=i.salary||0;hours+=i.hours||0;count++;});});
+    const s=DATA.settings, tax=s.taxEnabled?shift*(Number(s.taxPercent)||0)/100:0;
+    const food=s.foodEnabled?(Number((s.foodByMonth||{})[key]??0)||0):0;
+    const extras=Object.values((s.expensesByMonth||{})[key]||{}).reduce((a,b)=>a+(Number(b)||0),0);
+    return {income:shift+side,net:Math.max(0,shift-tax-food)+side-extras,shift,side,tax,food,extras,hours,count,key};
+  }
+  function renderHome(){
+    const mm=monthMoney(sumView);
+    el('homeContent').innerHTML=`
+      <div class="home-grid"><div class="mini-card"><div class="muted">Смены</div><div class="n">${mm.count}</div></div><div class="mini-card"><div class="muted">Часов</div><div class="n">${mm.hours}</div></div><div class="mini-card"><div class="muted">Питание</div><div class="n">${Math.round(mm.food)} ₽</div></div><div class="mini-card"><div class="muted"></div><div class="n">${Math.round(mm.extras)} ₽</div></div></div>
+      <div class="card"><label class="field-label"> за ${MONTH_NAMES[sumView.getMonth()].toLowerCase()}</label><div id="expenseList"></div><button class="btn ghost" id="addExpenseBtn" style="margin-top:10px">＋ Добавить расход</button></div>
+      <div class="card"><label class="field-label">Прогноз</label><div class="goal-name">${mm.count?`Средняя смена: ${Math.round(mm.income/mm.count).toLocaleString('ru-RU')} ₽`:'Добавь первую смену'}</div><div class="muted">Средний заработок считается по всем сменам выбранного месяца.</div></div>`;
+    renderExpenses(); el('addExpenseBtn').onclick=addExpense;
+  }
+  function renderExpenses(){const box=el('expenseList');if(!box)return;const key=monthKeyOf(sumView), ex=(DATA.settings.expensesByMonth||{})[key]||{};const rows=Object.entries(ex);box.innerHTML=rows.length?rows.map(([id,x])=>`<div class="expense-row"><input value="${x.name||''}" data-exp="${id}" class="exp-name"><input type="number" value="${x.amount||0}" data-exp="${id}" class="exp-amount"><button data-del="${id}">×</button></div>`).join(''):'<div class="muted">Нет дополнительных расходов.</div>';box.querySelectorAll('.exp-name,.exp-amount').forEach(i=>i.onchange=saveExpensesFromUI);box.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{delete (DATA.settings.expensesByMonth[key]||{})[b.dataset.del];await saveData();renderAll();});}
+  async function saveExpensesFromUI(){const key=monthKeyOf(sumView), ex=DATA.settings.expensesByMonth[key]||{};document.querySelectorAll('.exp-name').forEach(i=>{const id=i.dataset.exp;ex[id]=ex[id]||{};ex[id].name=i.value;});document.querySelectorAll('.exp-amount').forEach(i=>{const id=i.dataset.exp;ex[id]=ex[id]||{};ex[id].amount=Math.max(0,Number(i.value)||0);});DATA.settings.expensesByMonth[key]=ex;await saveData();renderHome();}
+  async function addExpense(){const key=monthKeyOf(sumView);DATA.settings.expensesByMonth[key]=DATA.settings.expensesByMonth[key]||{};DATA.settings.expensesByMonth[key]['e'+Date.now()]={name:'Новый расход',amount:0};await saveData();renderHome();}
+
+
+  function renderSettings(){
+    const s = DATA.settings;
+    el('homeDivisionDisplay').textContent = DIVISION_LABEL[s.homeDivision] || '—';
+    el('taxOn').classList.toggle('selected', !!s.taxEnabled);
+    el('taxOff').classList.toggle('selected', !s.taxEnabled);
+    el('taxPercentInput').value = s.taxPercent || '';
+    el('foodOn').classList.toggle('selected', !!s.foodEnabled);
+    el('foodOff').classList.toggle('selected', !s.foodEnabled);
+    const currentMonth = `${sumView.getFullYear()}-${String(sumView.getMonth()+1).padStart(2,'0')}`;
+    el('foodMonthInput').value = currentMonth;
+    el('foodAmountInput').value = ((s.foodByMonth||{})[currentMonth] ?? s.foodAmount) || '';
+  }
+  el('changeHomeDivBtn').addEventListener('click', ()=>{ showOnboarding(); });
+  el('taxOn').addEventListener('click', async ()=>{ DATA.settings.taxEnabled = true; await saveData(); renderAll(); toast('Налог включён'); });
+  el('taxOff').addEventListener('click', async ()=>{ DATA.settings.taxEnabled = false; await saveData(); renderAll(); toast('Налог выключен'); });
+  el('taxPercentInput').addEventListener('change', async (e)=>{
+    let v = Number(e.target.value);
+    if(isNaN(v) || v<0) v = 0;
+    if(v>100) v = 100;
+    DATA.settings.taxPercent = v;
+    await saveData(); renderAll(); toast('Сохранено');
+  });
+  el('foodOn').addEventListener('click', async ()=>{ DATA.settings.foodEnabled = true; await saveData(); renderAll(); toast('Питание включено'); });
+  el('foodOff').addEventListener('click', async ()=>{ DATA.settings.foodEnabled = false; await saveData(); renderAll(); toast('Питание выключено'); });
+  el('foodMonthInput').addEventListener('change', ()=>{
+    const k=el('foodMonthInput').value; el('foodAmountInput').value=((DATA.settings.foodByMonth||{})[k] ?? DATA.settings.foodAmount) || '';
+  });
+  el('foodAmountInput').addEventListener('change', async (e)=>{
+    let v = Math.round(Number(e.target.value)); if(isNaN(v)||v<0) v=0;
+    const k=el('foodMonthInput').value; DATA.settings.foodByMonth=DATA.settings.foodByMonth||{};
+    if(k) DATA.settings.foodByMonth[k]=v;
+    await saveData(); renderAll(); toast('Питание за месяц сохранено');
+  });
+  el('resetBtn').addEventListener('click', async ()=>{
+    if(confirm('Точно удалить ВСЕ записи и настройки? Это необратимо.')){
+      DATA = {settings:{homeDivision:null, taxEnabled:false, taxPercent:0, foodEnabled:false, foodAmount:0, foodByMonth:{}, scheduleStart:null, expensesByMonth:{}}, shifts:{}};
+      await saveData(); renderAll(); toast('Данные очищены');
+      maybeShowOnboarding();
+    }
+  });
+
+  document.querySelectorAll('.tab-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+      document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+      btn.classList.add('active');
+      el('view-'+btn.dataset.view).classList.add('active');
+    });
+  });
+  el('prevMonth').addEventListener('click', ()=>{ calView = shiftMonth(calView,-1); renderCalendar(); });
+  el('nextMonth').addEventListener('click', ()=>{ calView = shiftMonth(calView,1); renderCalendar(); });
+  el('prevMonthSum').addEventListener('click', ()=>{ sumView = shiftMonth(sumView,-1); renderHome(); renderSummary(); });
+  el('nextMonthSum').addEventListener('click', ()=>{ sumView = shiftMonth(sumView,1); renderHome(); renderSummary(); });
+
+  
+function renderProductivity(){const g=el('prodGrid');if(!g)return;let shifts=0,hours=0,lines=0,bestLines=0,bestSpeed=0,bestSalary=0;Object.values(DATA.shifts).forEach(day=>{['shift','side'].forEach(t=>{const x=day[t];if(!x||x.sick)return;shifts++;hours+=Number(x.hours||0);lines+=Number(x.lines||0);bestLines=Math.max(bestLines,Number(x.lines||0));bestSalary=Math.max(bestSalary,Number(x.salary||0));if(x.hours)bestSpeed=Math.max(bestSpeed,Number(x.lines||0)/Number(x.hours));});});const avgSpeed=hours?Math.round(lines/hours):0;g.innerHTML=`<div class="prod-card"><span class="prod-label">Всего строк</span><b>${Math.round(lines).toLocaleString('ru-RU')}</b></div><div class="prod-card"><span class="prod-label">Средняя скорость</span><b>${avgSpeed} / час</b></div><div class="prod-card"><span class="prod-label">Рекорд строк</span><b>${Math.round(bestLines).toLocaleString('ru-RU')}</b></div><div class="prod-card"><span class="prod-label">Макс. скорость</span><b>${Math.round(bestSpeed)} / час</b></div><div class="prod-card"><span class="prod-label">Лучший заработок</span><b>${Math.round(bestSalary).toLocaleString('ru-RU')} ₽</b></div><div class="prod-card"><span class="prod-label">Всего смен</span><b>${shifts}</b></div>`;}
+
+function renderAll(){renderProductivity(); renderHome(); renderCalendar(); renderHistory(); renderSummary(); renderSettings(); }
+
+  async function bootApp(){
+    const {data:{session}}=await supabase.auth.getSession();
+    if(session){ CURRENT_USER=session.user; el('authOverlay').style.display='none'; await loadData(); renderAll(); maybeShowOnboarding(); }
+  }
+  let authMode='login';
+  el('authSwitch').addEventListener('click',()=>{authMode=authMode==='login'?'signup':'login'; el('authSubmit').textContent=authMode==='login'?'Войти':'Создать аккаунт'; el('authSwitch').textContent=authMode==='login'?'Создать аккаунт':'У меня уже есть аккаунт'; el('authTitle').textContent=authMode==='login'?'Войди, чтобы синхронизировать смены между устройствами':'Создай аккаунт AMTEL'; el('authMsg').textContent='';});
+  el('authSubmit').addEventListener('click',async()=>{const email=el('authEmail').value.trim(),password=el('authPassword').value; if(!email||password.length<6){el('authMsg').textContent='Введи email и пароль минимум из 6 символов';return;} el('authSubmit').disabled=true; let r=authMode==='login'?await supabase.auth.signInWithPassword({email,password}):await supabase.auth.signUp({email,password}); el('authSubmit').disabled=false; if(r.error){el('authMsg').textContent=r.error.message;return;} if(authMode==='signup'&&!r.data.session){el('authMsg').style.color='#2d8a57';el('authMsg').textContent='Аккаунт создан. Проверь почту и подтверди email.';return;} CURRENT_USER=r.data.user; el('authOverlay').style.display='none'; await loadData(); renderAll(); maybeShowOnboarding();});
+  (async function init(){ await bootApp(); })();
+})();
+</script>
+
+<g-ext-in></g-ext-in></body></html>
